@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# ローカル開発のプレビュー出力（公開は docs/ を使う）
+output/
+
+# 自動更新ログ（ローカル運用の記録。公開不要）
+logs/
+
+# エディタ/ツールのローカル設定
+.claude/
+
+# 開発スクラッチ・元データ（Excelダンプ等）
+_dump*.py
+_mid_dump.txt
+
+# OS
+Thumbs.db
+.DS_Store
