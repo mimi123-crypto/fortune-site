@@ -52,6 +52,12 @@ def resolve_message_csv() -> str:
 CATEGORIES = ["総合", "仕事", "恋愛", "健康"]
 CAT_ICON = {"総合": "🔮", "仕事": "💼", "恋愛": "💕", "健康": "🌿"}
 
+# サイトのブランド名・公開URL（SEO/サイトマップ/OGに使う）
+SITE_NAME = "今日の12星座占いラボ"
+SITE_BASE_URL = os.environ.get(
+    "SITE_BASE_URL", "https://mimi123-crypto.github.io/fortune-site"
+).rstrip("/")
+
 # 星(★)表示
 STAR = {1: "★☆☆☆☆", 2: "★★☆☆☆", 3: "★★★☆☆", 4: "★★★★☆", 5: "★★★★★"}
 
@@ -148,12 +154,13 @@ def build_day(date: datetime.date) -> dict:
 # ──────────────────────────────────────────────
 # HTML出力
 # ──────────────────────────────────────────────
-def render_html(day: dict) -> str:
+def render_html(day: dict, canonical_url: str = "") -> str:
     e = html.escape
     date_str = day["date"]
     moon = day["moon"]
     signs = day["signs"]
     planet_line = " / ".join(f"{k}:{v}" for k, v in signs.items())
+    canonical_tag = f'<link rel="canonical" href="{e(canonical_url)}">' if canonical_url else ""
 
     cards = []
     for r in day["rows"]:
@@ -191,8 +198,13 @@ def render_html(day: dict) -> str:
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>今日の12星座占い（{e(date_str)}）｜総合・仕事・恋愛・健康運ランキング</title>
+<title>{e(SITE_NAME)}（{e(date_str)}）｜総合・仕事・恋愛・健康運ランキング</title>
 <meta name="description" content="{e(date_str)}の12星座占い。総合運ランキングに加え、仕事運・恋愛運・健康運を本物の天体計算（スイス・エフェメリス）で毎日自動更新。">
+{canonical_tag}
+<meta property="og:type" content="website">
+<meta property="og:title" content="{e(SITE_NAME)}（{e(date_str)}）">
+<meta property="og:description" content="今日の12星座を総合・仕事・恋愛・健康運でランキング。本物の天体計算で毎日自動更新。">
+<meta name="robots" content="index,follow">
 <style>
   :root {{ --bg:#0f1020; --card:#1c1d33; --accent:#ffd86b; --text:#ececf5; --sub:#a9a9c6; --line:#2b2c47; }}
   * {{ box-sizing:border-box; }}
@@ -221,7 +233,7 @@ def render_html(day: dict) -> str:
 </head>
 <body>
   <header>
-    <h1>🔮 今日の12星座占い</h1>
+    <h1>🔮 {e(SITE_NAME)}</h1>
     <div class="meta">{e(date_str)}　総合・仕事・恋愛・健康運ランキング</div>
     <div class="meta">🌙 月相：{e(moon['name'])}　／　天体：{e(planet_line)}</div>
   </header>
@@ -234,6 +246,38 @@ def render_html(day: dict) -> str:
   </footer>
 </body>
 </html>"""
+
+
+# ──────────────────────────────────────────────
+# SEO: robots.txt と sitemap.xml（Googleにページを教える）
+# ──────────────────────────────────────────────
+def write_robots(out_dir: str) -> None:
+    content = (
+        "User-agent: *\n"
+        "Allow: /\n\n"
+        f"Sitemap: {SITE_BASE_URL}/sitemap.xml\n"
+    )
+    with open(os.path.join(out_dir, "robots.txt"), "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def write_sitemap(out_dir: str, today_str: str) -> None:
+    """out_dir内のページを列挙してsitemap.xmlを書く（トップ＋日付別アーカイブ）。"""
+    urls = [(SITE_BASE_URL + "/", today_str, "daily", "1.0")]  # トップ（最新）
+    for name in sorted(os.listdir(out_dir)):
+        if name.startswith("zodiac_") and name.endswith(".html"):
+            d = name[len("zodiac_"):-len(".html")]
+            urls.append((f"{SITE_BASE_URL}/{name}", d, "monthly", "0.6"))
+    items = "\n".join(
+        f"  <url><loc>{html.escape(loc)}</loc><lastmod>{lm}</lastmod>"
+        f"<changefreq>{cf}</changefreq><priority>{pr}</priority></url>"
+        for loc, lm, cf, pr in urls
+    )
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           f"{items}\n</urlset>\n")
+    with open(os.path.join(out_dir, "sitemap.xml"), "w", encoding="utf-8") as f:
+        f.write(xml)
 
 
 def main():
@@ -252,15 +296,23 @@ def main():
 
     date = datetime.date.fromisoformat(args.date) if args.date else datetime.date.today()
     day = build_day(date)
-    htmltext = render_html(day)
 
     out_dir = args.out if os.path.isabs(args.out) else os.path.join(HERE, args.out)
     os.makedirs(out_dir, exist_ok=True)
     dated = os.path.join(out_dir, f"zodiac_{day['date']}.html")
     index = os.path.join(out_dir, "index.html")
-    for path in (dated, index):
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(htmltext)
+
+    # canonicalはページごとに変える（トップ=サイトroot、アーカイブ=自分のURL）
+    index_html = render_html(day, canonical_url=SITE_BASE_URL + "/")
+    dated_html = render_html(day, canonical_url=f"{SITE_BASE_URL}/zodiac_{day['date']}.html")
+    with open(index, "w", encoding="utf-8") as f:
+        f.write(index_html)
+    with open(dated, "w", encoding="utf-8") as f:
+        f.write(dated_html)
+
+    # SEO: robots.txt と sitemap.xml を更新
+    write_robots(out_dir)
+    write_sitemap(out_dir, day["date"])
 
     print(f"🌙 月相: {day['moon']['name']}")
     print(f"📅 {day['date']} の12星座ランキング（総合/仕事/恋愛/健康）:")
@@ -270,6 +322,8 @@ def main():
         print(f"  {r['rank']:>2}位 {r['sign']:<6} [{line}]")
     print(f"\n💾 出力: {index}")
     print(f"        {dated}")
+    print(f"        {os.path.join(out_dir, 'sitemap.xml')}")
+    print(f"        {os.path.join(out_dir, 'robots.txt')}")
 
     if args.open:
         import webbrowser

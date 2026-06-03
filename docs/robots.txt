@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mimi123-crypto.github.io/fortune-site/sitemap.xml
