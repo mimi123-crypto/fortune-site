@@ -1,4 +1,4 @@
-<#
+﻿<#
   publish.ps1  —  占いサイトを毎日更新してGitHubへ反映するローカル用スクリプト
   =================================================================
   1. build_site.py で docs/index.html を生成
@@ -31,7 +31,9 @@ Write-Log "=== publish 開始 ==="
 
 try {
     # 1) サイト生成（公開フォルダ docs/ に出力）
-    $py = python build_site.py --out docs 2>&1 | Out-String
+    #    ※ 2>&1 は使わない（PS5.1ではネイティブのstderrがエラー扱いになり誤爆するため）
+    $py = python build_site.py --out docs | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "build_site.py が失敗しました (exit $LASTEXITCODE)" }
     Write-Log "build_site.py 実行完了"
     foreach ($l in ($py -split "`n")) {
         $t = $l.Trim()
